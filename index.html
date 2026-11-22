@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Teleprompter</title>
+<style>
+:root{--bg:#000000;--fg:#ffffff;--accent:#0a84ff;--glass:rgba(38,38,42,.62);--hair:rgba(127,127,127,.28)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;transition:background-color .4s ease}
+button,input,select,textarea{font:inherit;color:inherit}
+#stage{position:fixed;inset:0;background:var(--bg);transition:background-color .4s ease}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none}
+#dim{position:absolute;inset:0;background:rgba(0,0,0,.42);display:none}
+#viewport{position:absolute;inset:0;overflow:hidden;touch-action:none}
+#flip{position:absolute;inset:0;transition:transform .35s ease}
+#guide{position:absolute;left:0;right:0;top:40%;border-top:1px solid var(--hair)}
+#track{position:absolute;left:0;right:0;top:0;padding:0 9vw;text-align:center;will-change:transform}
+#track p{margin:0 0 .6em;font-weight:600;line-height:1.3;letter-spacing:-.015em}
+.w{transition:opacity .35s ease}
+.w.past{opacity:.28}
+.w.cur{text-decoration:underline;text-decoration-thickness:.06em;text-underline-offset:.18em}
+#fade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(var(--bg) 0%,rgba(0,0,0,0) 14%,rgba(0,0,0,0) 86%,var(--bg) 100%)}
+
+/* Floating controls */
+#modes{position:fixed;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:2px;padding:4px;border-radius:999px;background:var(--glass);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);z-index:5}
+#status{position:fixed;top:74px;left:50%;transform:translateX(-50%);font-size:13px;color:rgba(255,255,255,.55);white-space:nowrap;pointer-events:none;z-index:5}
+#bar{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:8px;border-radius:999px;background:var(--glass);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);box-shadow:0 10px 36px rgba(0,0,0,.35);z-index:5;transition:opacity .6s ease;max-width:calc(100vw - 24px);flex-wrap:wrap;justify-content:center}
+#bar.idle{opacity:.12}
+#bar:hover{opacity:1}
+.btn{height:38px;min-width:38px;padding:0 14px;border:0;border-radius:999px;background:transparent;color:#fff;font-size:14px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:background-color .2s ease,opacity .2s ease;white-space:nowrap}
+.btn:hover{background:rgba(255,255,255,.12)}
+.btn:disabled{opacity:.35;cursor:default;background:transparent}
+.btn.on{background:rgba(255,255,255,.22)}
+.btn.primary{background:#fff;color:#000;width:52px;height:52px;padding:0;font-size:18px}
+.btn.primary:hover{background:#e8e8ed}
+.btn.rec{color:#ff453a}
+.sep{width:1px;height:24px;background:rgba(255,255,255,.18);margin:0 4px}
+
+/* Settings sheet */
+#sheet{position:fixed;top:12px;right:12px;bottom:12px;width:min(390px,calc(100vw - 24px));background:rgba(246,246,248,.97);color:#1d1d1f;border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.45);transform:translateX(calc(100% + 30px));transition:transform .45s cubic-bezier(.2,.8,.2,1);z-index:10;display:flex;flex-direction:column}
+#sheet.open{transform:none}
+#sheet header{display:flex;justify-content:space-between;align-items:center;padding:18px 20px 8px}
+#sheet h1{font-size:20px;margin:0;font-weight:700;letter-spacing:-.02em}
+#sheet .done{border:0;background:none;color:var(--accent);font-size:15px;font-weight:600;cursor:pointer;padding:6px 4px}
+#sheet .body{overflow:auto;padding:4px 18px 24px;flex:1;-webkit-overflow-scrolling:touch}
+.sec{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:12px}
+.sec h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#86868b;margin:0 0 10px;font-weight:600}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0 0}
+.row:first-of-type{margin-top:0}
+.lbl{font-size:15px}
+output{font-size:14px;color:#86868b;font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+input[type=range]{width:100%;margin:8px 0 0;accent-color:#0a84ff}
+input[type=color]{width:34px;height:28px;border:0;background:none;padding:0;cursor:pointer}
+.swatches{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.sw{width:26px;height:26px;border-radius:50%;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0}
+.sw.on{box-shadow:0 0 0 2px #fff,0 0 0 4px #0a84ff}
+.seg{display:inline-flex;background:#e9e9eb;border-radius:9px;padding:2px;gap:2px}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:13px;color:#1d1d1f}
+.seg button.on{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.15);font-weight:600}
+textarea{width:100%;min-height:150px;border:1px solid #d2d2d7;border-radius:10px;padding:10px 12px;font-size:15px;line-height:1.45;background:#fff;resize:vertical;user-select:text;-webkit-user-select:text}
+select{border:1px solid #d2d2d7;border-radius:8px;padding:6px 8px;background:#fff;font-size:14px}
+.file-btn{display:inline-block;padding:8px 14px;border-radius:999px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer;font-weight:500}
+input[type=file]{display:none}
+.hint{font-size:12px;color:#86868b;margin:10px 0 0;line-height:1.45}
+@media (max-width:600px){#modes{top:12px}#status{top:62px}#bar{bottom:12px}}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <video id="cam" autoplay muted playsinline></video>
+  <div id="dim"></div>
+  <div id="viewport">
+    <div id="flip">
+      <div id="guide"></div>
+      <div id="track"></div>
+    </div>
+  </div>
+  <div id="fade"></div>
+</div>
+
+<nav id="modes" aria-label="Scroll mode">
+  <button class="btn on" data-mode="voice">Voice</button>
+  <button class="btn" data-mode="auto">Auto</button>
+  <button class="btn" data-mode="manual">Manual</button>
+</nav>
+<div id="status"></div>
+
+<div id="bar">
+  <button class="btn" id="reset" title="Back to the start (R)">↺ Reset</button>
+  <button class="btn primary" id="play" aria-label="Play or pause (Space)">▶</button>
+  <button class="btn" id="cam-btn">Camera</button>
+  <button class="btn" id="rec" disabled>● Record</button>
+  <span class="sep"></span>
+  <button class="btn" id="open">Settings</button>
+</div>
+
+<aside id="sheet" aria-label="Settings">
+  <header>
+    <h1>Teleprompter</h1>
+    <button class="done" id="close">Done</button>
+  </header>
+  <div class="body">
+
+    <section class="sec">
+      <h2>Script</h2>
+      <textarea id="script" spellcheck="false" placeholder="Paste your script here…"></textarea>
+      <div class="row" style="margin-top:12px">
+        <label class="file-btn" for="file">Upload PDF, Word or TXT</label>
+        <input type="file" id="file" accept=".pdf,.docx,.txt,.md,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+      </div>
+      <p class="hint" id="filehint">Files are read in your browser and never uploaded. Scanned PDFs need selectable text.</p>
+    </section>
+
+    <section class="sec">
+      <h2>Text</h2>
+      <div class="row"><span class="lbl">Size</span><output id="fontOut">40</output></div>
+      <input type="range" id="font" min="0" max="100" value="40" aria-label="Text size">
+      <div class="row" style="margin-top:16px"><span class="lbl">Color</span>
+        <div class="swatches" id="fgSw"></div>
+        <input type="color" id="fg" value="#ffffff" aria-label="Custom text color">
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Mirror</h2>
+      <div class="row">
+        <span class="lbl">Flip</span>
+        <div class="seg">
+          <button data-flip="X">Horizontal</button>
+          <button data-flip="Y">Vertical</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Background</h2>
+      <div class="row"><span class="lbl">Color</span>
+        <div class="swatches" id="bgSw"></div>
+        <input type="color" id="bg" value="#000000" aria-label="Custom background color">
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Scrolling</h2>
+      <div class="row"><span class="lbl">Auto speed</span><output id="speedOut">60</output></div>
+      <input type="range" id="speed" min="10" max="200" value="60" aria-label="Auto scroll speed">
+      <div class="row" style="margin-top:16px"><span class="lbl">Voice language</span>
+        <select id="lang">
+          <option value="en-US">English (US)</option>
+          <option value="en-GB">English (UK)</option>
+          <option value="en-NG">English (Nigeria)</option>
+          <option value="en-CA">English (Canada)</option>
+          <option value="en-AU">English (Australia)</option>
+        </select>
+      </div>
+      <p class="hint">Voice mode follows your words and works best in Chrome or Edge. Manual mode lets you scroll with the mouse wheel, a trackpad, touch, or the arrow keys.</p>
+    </section>
+
+  </div>
+</aside>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const track = $('#track'), flip = $('#flip'), stage = $('#stage'), viewport = $('#viewport');
+  const cam = $('#cam'), dim = $('#dim'), bar = $('#bar'), statusEl = $('#status'), fade = $('#fade');
+  const playBtn = $('#play');
+
+  const SAMPLE = `Welcome to your teleprompter.
+
+Paste your script or upload a file, then press play and start speaking. In Voice mode the words move with you, so you can pause, improvise, or take your time without losing your place.
+
+Choose a size, mirror the text, pick your colors, and record a selfie take whenever you are ready.`;
+
+  const S = {
+    mode: 'voice', playing: false,
+    pos: 0, target: 0,          // scroll position in px (what is shown) and where it is heading
+    words: [], cur: -1,         // word entries {k, el}; index of the last word read
+    speed: 60, flipX: false, flipY: false,
+    stream: null, recorder: null, chunks: [],
+    rec: null, last: performance.now(), drag: null, idleT: null, flashT: null
+  };
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  const H = () => stage.clientHeight;
+  const readLine = () => H() * 0.4;
+  const fontPx = v => Math.round(14 + v * 2.2);          // 0 -> 14px, 100 -> 234px
+  const norm = s => s.toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/[^\p{L}\p{N}']+/gu, ' ')
+    .replace(/(^|\s)'+|'+(?=\s|$)/g, '$1')
+    .trim();
+
+  /* ---------- Script rendering ---------- */
+  function render(text) {
+    track.innerHTML = '';
+    S.words = [];
+    text.split(/\n+/).map(p => p.trim()).filter(Boolean).forEach(para => {
+      const p = document.createElement('p');
+      para.split(/\s+/).forEach(tok => {
+        const span = document.createElement('span');
+        span.className = 'w';
+        span.textContent = tok + ' ';
+        norm(tok).split(' ').filter(Boolean).forEach(k => S.words.push({ k, el: span }));
+        p.appendChild(span);
+      });
+      track.appendChild(p);
+    });
+    S.cur = -1; S.pos = 0; S.target = 0;
+    layout();
+    progress();
+  }
+
+  function layout() {
+    const h = H();
+    track.style.paddingTop = readLine() + 'px';
+    track.style.paddingBottom = (h * 0.7) + 'px';
+    track.style.fontSize = fontPx(+$('#font').value) + 'px';
+    if (S.cur >= 0) S.target = wordTarget(S.cur);
+  }
+
+  // Scroll distance that puts word i on the reading line.
+  function wordTarget(i) {
+    const el = S.words[i].el;
+    return Math.max(0, el.offsetTop + el.offsetHeight / 2 - readLine());
+  }
+
+  function setCurrent(i) {
+    if (S.cur >= 0 && S.words[S.cur]) S.words[S.cur].el.classList.remove('cur');
+    const lo = Math.max(0, Math.min(S.cur, i));
+    for (let j = lo; j < S.words.length; j++) S.words[j].el.classList.toggle('past', j < i);
+    S.cur = i;
+    if (i >= 0) S.words[i].el.classList.add('cur');
+  }
+
+  /* ---------- Voice following ---------- */
+  // Match the most recent spoken words against the script, only moving forward.
+  function follow(spoken) {
+    const n = S.words.length, cur = S.cur;
+    const tail = spoken.slice(-8);
+    let best = null;
+    for (let j = Math.max(0, cur + 1); j < Math.min(n, cur + 150); j++) {
+      let k = 0;
+      while (k < tail.length && k < 5 && j - k >= 0 && S.words[j - k].k === tail[tail.length - 1 - k]) k++;
+      if (!k) continue;
+      const dist = j - cur;
+      if (k === 1 && dist > 3) continue;          // single-word matches must be close by
+      const score = k * 100 - dist;
+      if (!best || score > best.score) best = { j, score };
+    }
+    if (best) {
+      setCurrent(best.j);
+      S.target = wordTarget(best.j);
+    }
+    progress();
+  }
+
+  function onResult(e) {
+    let text = '';
+    for (let i = 0; i < e.results.length; i++) text += ' ' + e.results[i][0].transcript;
+    const spoken = norm(text).split(' ').filter(Boolean);
+    if (spoken.length) follow(spoken);
+  }
+
+  function startVoice() {
+    if (!SR) { flash('Voice mode needs Chrome or Edge'); return false; }
+    const r = new SR();
+    r.continuous = true;
+    r.interimResults = true;
+    r.lang = $('#lang').value;
+    r.onresult = onResult;
+    r.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        flash('Microphone access is blocked');
+        setPlaying(false);
+      }
+    };
+    r.onend = () => {                             // Chrome stops after silence; keep listening
+      if (S.playing && S.mode === 'voice' && S.rec === r) { try { r.start(); } catch (_) {} }
+    };
+    S.rec = r;
+    try { r.start(); } catch (_) { S.rec = null; return false; }
+    return true;
+  }
+
+  function stopVoice() {
+    const r = S.rec;
+    S.rec = null;
+    if (r) { r.onend = null; try { r.stop(); } catch (_) {} }
+  }
+
+  /* ---------- Playback and modes ---------- */
+  function setPlaying(on) {
+    if (on && S.mode !== 'manual' && !S.words.length) { flash('Add a script first'); return; }
+    if (on && S.mode === 'voice' && !startVoice()) on = false;
+    if (!on && S.mode === 'voice') stopVoice();
+    S.playing = on;
+    playBtn.textContent = on ? '❚❚' : '▶';
+    playBtn.setAttribute('aria-label', on ? 'Pause' : 'Play');
+    wake();
+    progress();
+  }
+
+  function setMode(m) {
+    if (S.playing) setPlaying(false);
+    stopVoice();
+    S.mode = m;
+    document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+    playBtn.disabled = m === 'manual';
+    S.target = S.pos;
+    progress();
+  }
+
+  function reset() {
+    if (S.playing) setPlaying(false);
+    S.pos = 0; S.target = 0;
+    setCurrent(-1);
+    progress();
+  }
+
+  function progress() {
+    const n = S.words.length;
+    if (!n) { statusEl.textContent = 'Paste or upload a script to begin'; return; }
+    const listening = S.playing && S.mode === 'voice' ? ' · listening' : '';
+    statusEl.textContent = `${Math.max(0, S.cur + 1)} of ${n} words${listening}`;
+  }
+
+  function flash(msg) {
+    statusEl.textContent = msg;
+    clearTimeout(S.flashT);
+    S.flashT = setTimeout(progress, 3000);
+  }
+
+  /* ---------- Animation loop: smooth, frame-rate independent ---------- */
+  function frame(t) {
+    const dt = Math.min(0.05, (t - S.last) / 1000 || 0);
+    S.last = t;
+    if (S.mode === 'auto' && S.playing) {
+      S.pos += S.speed * dt;
+      S.target = S.pos;
+    } else if (S.mode === 'voice') {
+      const k = 1 - Math.exp(-dt * 5);             // ease toward the spoken word
+      S.pos += (S.target - S.pos) * k;
+    }
+    const max = Math.max(0, track.offsetHeight - H() * 0.6);
+    if (S.pos > max) {
+      S.pos = max; S.target = max;
+      if (S.mode === 'auto' && S.playing) setPlaying(false);
+    }
+    if (S.pos < 0) { S.pos = 0; S.target = 0; }
+    track.style.transform = `translate3d(0,${(-S.pos).toFixed(2)}px,0)`;
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- Manual scrolling (wheel, drag, keys) ---------- */
+  viewport.addEventListener('wheel', e => {
+    e.preventDefault();
+    S.pos += e.deltaY; S.target = S.pos;
+    wake();
+  }, { passive: false });
+
+  viewport.addEventListener('pointerdown', e => { S.drag = { y: e.clientY }; viewport.setPointerCapture(e.pointerId); });
+  viewport.addEventListener('pointermove', e => {
+    if (!S.drag) return;
+    S.pos -= (e.clientY - S.drag.y); S.target = S.pos;
+    S.drag.y = e.clientY;
+  });
+  viewport.addEventListener('pointerup', () => { S.drag = null; });
+
+  addEventListener('keydown', e => {
+    if (e.target.matches('textarea,input,select')) return;
+    if (e.code === 'Space') { e.preventDefault(); if (!playBtn.disabled) playBtn.click(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); S.pos += 60; S.target = S.pos; }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); S.pos -= 60; S.target = S.pos; }
+    else if (e.key === 'r' || e.key === 'R') reset();
+    else if (e.key === 'Escape') sheet(false);
+  });
+
+  /* ---------- Idle auto-hide for controls while playing ---------- */
+  function wake() {
+    bar.classList.remove('idle');
+    clearTimeout(S.idleT);
+    if (S.playing) S.idleT = setTimeout(() => bar.classList.add('idle'), 2800);
+  }
+  ['pointermove', 'pointerdown', 'keydown'].forEach(ev => addEventListener(ev, wake));
+
+  /* ---------- Selfie camera and recording ---------- */
+  async function toggleCam() {
+    if (S.stream) {
+      if (S.recorder && S.recorder.state !== 'inactive') S.recorder.stop();
+      S.stream.getTracks().forEach(t => t.stop());
+      S.stream = null;
+      cam.srcObject = null; cam.style.display = 'none'; dim.style.display = 'none'; fade.style.display = '';
+      $('#cam-btn').classList.remove('on');
+      $('#rec').disabled = true;
+      return;
+    }
+    try {
+      S.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true })
+        .catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } }));
+    } catch (_) { flash('Camera access is blocked'); return; }
+    cam.srcObject = S.stream;
+    cam.style.display = 'block'; dim.style.display = 'block'; fade.style.display = 'none';
+    $('#cam-btn').classList.add('on');
+    $('#rec').disabled = false;
+  }
+
+  function toggleRec() {
+    if (!S.stream) return;
+    if (S.recorder && S.recorder.state !== 'inactive') { S.recorder.stop(); return; }
+    const type = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+    const rec = new MediaRecorder(S.stream, type ? { mimeType: type } : {});
+    S.chunks = [];
+    rec.ondataavailable = e => { if (e.data.size) S.chunks.push(e.data); };
+    rec.onstop = () => {
+      const mime = rec.mimeType || 'video/webm';
+      const blob = new Blob(S.chunks, { type: mime });
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.href = URL.createObjectURL(blob);
+      a.download = `selfie-take-${stamp}.${mime.includes('mp4') ? 'mp4' : 'webm'}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      $('#rec').classList.remove('rec');
+      $('#rec').textContent = '● Record';
+      flash('Recording saved');
+    };
+    S.recorder = rec;
+    rec.start(1000);
+    $('#rec').classList.add('rec');
+    $('#rec').textContent = '■ Stop';
+  }
+
+  /* ---------- Script import: TXT, DOCX, PDF (libraries load on demand) ---------- */
+  const CDN = {
+    pdf: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+    pdfWorker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+    docx: 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'
+  };
+  const loaded = {};
+  function loadScript(src) {
+    return loaded[src] ||= new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function readFile(file) {
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.txt') || name.endsWith('.md')) return file.text();
+    if (name.endsWith('.docx')) {
+      await loadScript(CDN.docx);
+      const { value } = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+      return value;
+    }
+    if (name.endsWith('.pdf')) {
+      await loadScript(CDN.pdf);
+      const lib = window.pdfjsLib;
+      lib.GlobalWorkerOptions.workerSrc = CDN.pdfWorker;
+      const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+      const pages = [];
+      for (let p = 1; p <= doc.numPages; p++) {
+        const content = await (await doc.getPage(p)).getTextContent();
+        pages.push(content.items.map(it => it.str + (it.hasEOL ? '\n' : ' ')).join('').replace(/[ \t]+\n/g, '\n'));
+      }
+      return pages.join('\n\n');
+    }
+    throw new Error('Unsupported file type');
+  }
+
+  $('#file').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    $('#filehint').textContent = 'Reading ' + f.name + '…';
+    try {
+      const text = (await readFile(f)).trim();
+      if (!text) throw new Error('empty');
+      $('#script').value = text;
+      render(text);
+      $('#filehint').textContent = 'Loaded ' + f.name;
+    } catch (_) {
+      $('#filehint').textContent = 'Could not read that file. Try TXT, DOCX or a PDF with selectable text.';
+    }
+  });
+
+  let inputTimer;
+  $('#script').addEventListener('input', e => {
+    const v = e.target.value;
+    clearTimeout(inputTimer);
+    inputTimer = setTimeout(() => render(v), 300);
+  });
+
+  /* ---------- Settings ---------- */
+  function sheet(open) { $('#sheet').classList.toggle('open', open); }
+
+  const BG = ['#000000', '#1c1c1e', '#ffffff', '#1e3a2f', '#2b1d0e'];
+  const FG = ['#ffffff', '#f5f5f7', '#ffd60a', '#64d2ff', '#30d158', '#000000'];
+
+  function setColor(kind, c) {
+    document.documentElement.style.setProperty(kind === 'bg' ? '--bg' : '--fg', c);
+    $(kind === 'bg' ? '#bg' : '#fg').value = c;
+    markSwatches(kind, c);
+  }
+  function markSwatches(kind, c) {
+    document.querySelectorAll(`#${kind}Sw .sw`).forEach(b => b.classList.toggle('on', b.dataset.c.toLowerCase() === c.toLowerCase()));
+  }
+  function buildSwatches(kind, colors) {
+    const box = $(`#${kind}Sw`);
+    box.innerHTML = colors.map(c => `<button class="sw" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join('');
+    box.addEventListener('click', e => {
+      const b = e.target.closest('.sw');
+      if (b) setColor(kind, b.dataset.c);
+    });
+  }
+  buildSwatches('fg', FG);
+  buildSwatches('bg', BG);
+  $('#fg').addEventListener('input', e => setColor('fg', e.target.value));
+  $('#bg').addEventListener('input', e => setColor('bg', e.target.value));
+
+  function applyFlip() {
+    flip.style.transform = `scale(${S.flipX ? -1 : 1},${S.flipY ? -1 : 1})`;
+    document.querySelectorAll('[data-flip]').forEach(b => {
+      b.classList.toggle('on', b.dataset.flip === 'X' ? S.flipX : S.flipY);
+    });
+  }
+  document.querySelectorAll('[data-flip]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.flip === 'X') S.flipX = !S.flipX; else S.flipY = !S.flipY;
+    applyFlip();
+  }));
+
+  $('#font').addEventListener('input', e => { $('#fontOut').textContent = e.target.value; layout(); });
+  $('#speed').addEventListener('input', e => { S.speed = +e.target.value; $('#speedOut').textContent = e.target.value; });
+
+  /* ---------- Wiring ---------- */
+  playBtn.addEventListener('click', () => setPlaying(!S.playing));
+  $('#reset').addEventListener('click', reset);
+  $('#cam-btn').addEventListener('click', toggleCam);
+  $('#rec').addEventListener('click', toggleRec);
+  $('#open').addEventListener('click', () => sheet(true));
+  $('#close').addEventListener('click', () => sheet(false));
+  document.querySelectorAll('#modes button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  addEventListener('resize', layout);
+
+  /* ---------- Start ---------- */
+  setColor('bg', '#000000');
+  setColor('fg', '#ffffff');
+  applyFlip();
+  $('#script').value = SAMPLE;
+  render(SAMPLE);
+  setMode('voice');
+  if (!SR) flash('Voice mode needs Chrome or Edge; Manual and Auto still work');
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
