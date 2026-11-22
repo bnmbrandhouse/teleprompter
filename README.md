@@ -1,6 +1,6 @@
-# Teleprompter
+# Mehon
 
-A free, browser-based teleprompter that follows your voice.
+Mehon is a free, browser-based teleprompter that follows your voice.
 
 - **Voice mode:** the script advances as you read.
 - **Auto mode:** scrolls at a speed you choose.
