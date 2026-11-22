@@ -3,7 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Teleprompter</title>
+<title>Teleprompter: a voice-following teleprompter</title>
+<meta name="description" content="A free, browser-based teleprompter that follows your voice. Import a script, set the size and colors, and record a selfie take.">
+<meta name="theme-color" content="#000000">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta property="og:title" content="Teleprompter">
+<meta property="og:description" content="A free, browser-based teleprompter that follows your voice.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23000'/%3E%3Crect x='14' y='18' width='36' height='5' rx='2.5' fill='%23fff' opacity='.35'/%3E%3Crect x='14' y='29.5' width='36' height='5' rx='2.5' fill='%23fff'/%3E%3Crect x='14' y='41' width='24' height='5' rx='2.5' fill='%23fff' opacity='.35'/%3E%3C/svg%3E">
 <style>
 :root{--bg:#000000;--fg:#ffffff;--accent:#0a84ff;--glass:rgba(38,38,42,.62);--hair:rgba(127,127,127,.28)}
 *{box-sizing:border-box}
@@ -82,6 +89,7 @@ input[type=file]{display:none}
 </style>
 </head>
 <body>
+<noscript><p style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:-apple-system,sans-serif">Teleprompter needs JavaScript to run.</p></noscript>
 
 <div id="stage">
   <video id="cam" autoplay muted playsinline></video>
@@ -394,7 +402,11 @@ Choose a size, mirror the text, pick your colors, and record a selfie take whene
 
   addEventListener('keydown', e => {
     if (e.target.matches('textarea,input,select')) return;
-    if (e.code === 'Space') { e.preventDefault(); if (!playBtn.disabled) playBtn.click(); }
+    if (e.code === 'Space') {
+      if (e.target.tagName === 'BUTTON') return;   // let the focused button handle Space itself
+      e.preventDefault();
+      if (!playBtn.disabled) playBtn.click();
+    }
     else if (e.key === 'ArrowDown') { e.preventDefault(); S.pos += 60; S.target = S.pos; }
     else if (e.key === 'ArrowUp') { e.preventDefault(); S.pos -= 60; S.target = S.pos; }
     else if (e.key === 'r' || e.key === 'R') reset();
